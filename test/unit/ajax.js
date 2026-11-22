@@ -60,6 +60,75 @@ module( "ajax", {
 		}
 	});
 
+	ajaxTest( "jQuery.ajax() - execute js for crossOrigin when dataType option is provided", 3, {
+		create: function( options ) {
+			options.crossDomain = true;
+			options.dataType = "script";
+			return jQuery.ajax( url("data/script.php?header=ecma"), options );
+		},
+		success: function() {
+			ok( true, "success" );
+		},
+		complete: function() {
+			ok( true, "complete" );
+		}
+	});
+
+	ajaxTest( "jQuery.ajax() - do not execute js (crossOrigin)", 2, {
+		create: function( options ) {
+			options.crossDomain = true;
+			return jQuery.ajax( url("data/script.php"), options );
+		},
+		success: function() {
+			ok( true, "success" );
+		},
+		fail: function() {
+			if ( jQuery.support.cors === false ) {
+				ok( true, "fail" );
+			}
+		},
+		complete: function() {
+			ok( true, "complete" );
+		}
+	});
+
+	ajaxTest( "jQuery.ajax() - do not execute js served with a script content-type (crossOrigin)", 4, [
+		{
+			create: function( options ) {
+				options.crossDomain = true;
+				return jQuery.ajax( url("data/script.php?header=ecma"), options );
+			},
+			success: function() {
+				ok( true, "success (application/ecmascript not executed)" );
+			},
+			fail: function() {
+				if ( jQuery.support.cors === false ) {
+					ok( true, "fail" );
+				}
+			},
+			complete: function() {
+				ok( true, "complete" );
+			}
+		},
+		{
+			create: function( options ) {
+				options.crossDomain = true;
+				return jQuery.ajax( url("data/script.php?header=js"), options );
+			},
+			success: function() {
+				ok( true, "success (text/javascript not executed)" );
+			},
+			fail: function() {
+				if ( jQuery.support.cors === false ) {
+					ok( true, "fail" );
+				}
+			},
+			complete: function() {
+				ok( true, "complete" );
+			}
+		}
+	]);
+
 	ajaxTest( "jQuery.ajax() - success callbacks (late binding)", 8, {
 		setup: addGlobalEvents("ajaxStart ajaxStop ajaxSend ajaxComplete ajaxSuccess"),
 		url: url("data/name.html"),
