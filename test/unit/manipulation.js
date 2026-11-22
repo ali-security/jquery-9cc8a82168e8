@@ -2444,7 +2444,7 @@ asyncTest( "Sanitized HTML doesn't get unsanitized", function() {
 		pending = 0,
 		calls = {};
 
-	expect( 22 );
+	expect( 24 );
 
 	Globals.register("xss");
 	window.xss = function( index ) {
@@ -2489,6 +2489,8 @@ asyncTest( "Sanitized HTML doesn't get unsanitized", function() {
 	test( "<foo\" alt=\"\" title=\"/><img src=url404 onerror=xss(8)>\">" );
 	test( "<img alt=\"<x\" title=\"\" src=\"/><img src=url404 onerror=xss(9)>\">" );
 	test( "<noscript/><img src=url404 onerror=xss(10)>" );
+
+	test( "<option><style></option></select><img src=url404 onerror=xss(11)></style>" );
 });
 
 test( "Sanitized HTML doesn't get unsanitized by DOM insertion methods or jQuery()", function() {
@@ -2523,4 +2525,92 @@ test( "Sanitized HTML doesn't get unsanitized by DOM insertion methods or jQuery
 		strictEqual( jQuery("<div></div>").append( jQuery.parseHTML( htmlString, parseContext ) ).find("img").length, 0,
 			"jQuery.parseHTML() keeps the content of <" + tag + "> inert" );
 	});
+});
+
+test( "Sanitized HTML starting with <option> or <optgroup> isn't parsed in a <select> context", function() {
+
+	var wrappers = [ "option", "optgroup" ],
+		div = document.createElement("div");
+
+	expect( wrappers.length * 3 );
+
+	// Support: IE<=9
+	// IE <=9 drops <option> tags inserted outside of a <select>
+	div.innerHTML = "<option></option>";
+
+	jQuery.each( wrappers, function( i, wrapper ) {
+
+		// Outside of a <select> the <input> is a child of the <option>/<optgroup>;
+		// a <select> wrapper would make the <input> close it instead
+		var htmlString = "<" + wrapper + "><input></" + wrapper + ">";
+
+		if ( !div.lastChild ) {
+			ok( true, "<" + wrapper + "> needs a <select> wrapper in this browser" );
+			ok( true, "<" + wrapper + "> needs a <select> wrapper in this browser" );
+			ok( true, "<" + wrapper + "> needs a <select> wrapper in this browser" );
+			return;
+		}
+
+		strictEqual( jQuery( htmlString ).filter( wrapper ).children("input").length, 1,
+			"jQuery( html ) parses the markup as is, input: " + htmlString );
+		strictEqual( jQuery("<div></div>").append( htmlString ).children( wrapper ).children("input").length, 1,
+			"append() parses the markup as is, input: " + htmlString );
+		strictEqual( jQuery("<div></div>").html( htmlString ).children( wrapper ).children("input").length, 1,
+			"html() parses the markup as is, input: " + htmlString );
+	});
+});
+
+asyncTest( "Sanitized HTML starting with <option> or <optgroup> doesn't get unsanitized", function() {
+
+	var tags = [ "style", "xmp", "title", "iframe", "noframes", "noembed", "noscript" ],
+		wrappers = [ "option", "optgroup" ],
+		methods = [ "html", "append", "prepend", "before", "after", "replaceWith" ],
+		inputs = [],
+		calls = {};
+
+	expect( wrappers.length * tags.length * ( methods.length + 3 ) );
+
+	Globals.register("xssOption");
+	window.xssOption = function( index ) {
+		calls[ index ] = true;
+	};
+
+	// Parsed outside of <select> (as a sanitizer does) the markup is inert:
+	// everything after the opening tag of the raw text element is its text.
+	// Wrapped in a <select>, browsers with the classic <select> parser drop the
+	// raw text element and the <img> gets created in the live document, so its
+	// onerror handler runs.
+	function payload( wrapper, tag ) {
+		var htmlString = "<" + wrapper + "><" + tag + "></" + wrapper + "></select>" +
+			"<img src='url404' onerror='xssOption(" + inputs.length + ")'></" + tag + ">";
+
+		inputs.push( htmlString );
+		return htmlString;
+	}
+
+	jQuery.each( wrappers, function( i, wrapper ) {
+		jQuery.each( tags, function( j, tag ) {
+			var htmlString, nodes;
+
+			jQuery.each( methods, function( k, method ) {
+				var container = jQuery("<div><span></span></div>").appendTo("#qunit-fixture");
+
+				container.children()[ method ]( payload( wrapper, tag ) );
+			});
+
+			htmlString = payload( wrapper, tag );
+			nodes = jQuery( htmlString );
+			strictEqual( nodes.length === 1 && nodes[ 0 ].nodeName.toLowerCase(), wrapper,
+				"jQuery( html ) creates the <" + wrapper + "> itself, input: " + htmlString );
+
+			jQuery.parseHTML( payload( wrapper, tag ), document );
+		});
+	});
+
+	setTimeout(function() {
+		jQuery.each( inputs, function( index, htmlString ) {
+			ok( !calls[ index ], "Insecure code wasn't executed, input: " + htmlString );
+		});
+		start();
+	}, 1000 );
 });
